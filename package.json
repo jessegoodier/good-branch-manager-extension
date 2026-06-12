@@ -195,9 +195,10 @@
     "vscode.git"
   ],
   "scripts": {
-    "build": "npm run update-lockfile && npm run compile",
+    "build": "npm run compile",
     "compile": "node ./node_modules/typescript/lib/tsc.js -p ./",
     "package": "npx @vscode/vsce package",
+    "release": "scripts/release.sh",
     "update-lockfile": "npm install --package-lock-only --ignore-scripts",
     "vscode:prepublish": "npm run build",
     "watch": "node ./node_modules/typescript/lib/tsc.js -watch -p ./"

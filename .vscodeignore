@@ -2,5 +2,6 @@ src/**
 scripts/**
 tsconfig.json
 .gitignore
+.github/**
 **/*.map
 node_modules/**
