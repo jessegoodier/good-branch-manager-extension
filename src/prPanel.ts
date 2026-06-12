@@ -34,7 +34,7 @@ export async function openCreatePrPanel(
   };
 
   const panel = vscode.window.createWebviewPanel(
-    'gitBranchPr.createPr',
+    'goodBranchManager.createPr',
     `New PR: ${branch.name}`,
     vscode.ViewColumn.Active,
     { enableScripts: true }

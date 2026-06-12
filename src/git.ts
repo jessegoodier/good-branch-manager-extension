@@ -83,6 +83,9 @@ export class Git {
   }
 
   async getDefaultBranch(): Promise<string> {
+    const configured = vscode.workspace.getConfiguration('goodBranchManager').get<string>('defaultBranch', '').trim();
+    if (configured) return configured;
+
     const headRef = await this.tryExec(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
     if (headRef) {
       return headRef.replace(/^origin\//, '');
@@ -154,6 +157,11 @@ export class Git {
 
   async getRemoteUrl(remote = 'origin'): Promise<string | undefined> {
     return this.tryExec(['remote', 'get-url', remote]);
+  }
+
+  async getRemoteBranches(): Promise<string[]> {
+    const raw = await this.tryExec(['for-each-ref', 'refs/remotes', '--format=%(refname:short)', '--sort=refname']);
+    return (raw ?? '').split('\n').filter((name) => name && !name.endsWith('/HEAD'));
   }
 
   /** Parses any common git hosting remote URL into its parts. Returns undefined only for

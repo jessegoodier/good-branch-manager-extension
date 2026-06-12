@@ -48,11 +48,11 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     try {
       this.repoInfo = await this.git.getBranches();
     } catch (err) {
-      console.error('gitBranchPr: failed to list branches', err);
+      console.error('goodBranchManager: failed to list branches', err);
       return [];
     }
 
-    const scope = vscode.workspace.getConfiguration('gitBranchPr').get<string>('branchScope', 'both');
+    const scope = vscode.workspace.getConfiguration('goodBranchManager').get<string>('branchScope', 'both');
     if (scope === 'local' || this.repoInfo.remote.length === 0) {
       return this.repoInfo.local.map((b) => new BranchNode(b, this.repoInfo!));
     }
@@ -79,12 +79,13 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     const item = new vscode.TreeItem(b.isRemote ? b.shortName : b.name);
     item.id = (b.isRemote ? 'remote:' : 'local:') + b.name;
 
-    const staleDays = vscode.workspace.getConfiguration('gitBranchPr').get<number>('staleAfterDays', 30);
+    const staleDays = vscode.workspace.getConfiguration('goodBranchManager').get<number>('staleAfterDays', 30);
     const ageDays = (Date.now() / 1000 - b.committerDateUnix) / 86400;
     const isStale = staleDays > 0 && ageDays > staleDays && !b.isCurrent;
 
     const status = this.syncStatus(b);
     const hints: string[] = [status.text, b.committerDateRelative];
+    if (!b.isRemote && b.name === node.repo.defaultBranch) hints.push('default');
     if (b.merged) hints.push('merged');
     if (isStale) hints.push('stale');
     item.description = hints.filter(Boolean).join(' · ');
@@ -98,6 +99,7 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
       `Last commit: ${b.committerDateRelative} (\`${b.sha}\`)`
     ];
     if (b.upstream) lines.push(`Upstream: \`${b.upstream}\``);
+    if (!b.isRemote && b.name === node.repo.defaultBranch) lines.push('Default branch.');
     if (b.merged) lines.push('Already merged into the default branch.');
     if (isStale) lines.push(`Stale: no commits in over ${staleDays} days.`);
     item.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
@@ -106,11 +108,13 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     ctx.push(b.isRemote ? 'remote' : 'local');
     if (b.upstream && !b.upstreamGone) ctx.push('upstream');
     if (b.isCurrent) ctx.push('current');
+    if (!b.isCurrent) ctx.push('not-current');
+    if (!b.isRemote && b.name === node.repo.defaultBranch) ctx.push('default');
     item.contextValue = ctx.join('-');
 
     if (!b.isCurrent) {
       item.command = {
-        command: 'gitBranchPr.checkout',
+        command: 'goodBranchManager.checkout',
         title: 'Checkout Branch',
         arguments: [node]
       };
