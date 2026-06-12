@@ -8,7 +8,7 @@ const BRANCH_NAME_RE = /^(?!\/|.*(?:\/\.|\/\/|\.\.|@\{|\\))[^\x00-\x20~^:?*[\]]+
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const tree = new BranchTreeProvider();
-  const view = vscode.window.createTreeView('gitBranchPr.branches', {
+  const view = vscode.window.createTreeView('goodBranchManager.branches', {
     treeDataProvider: tree,
     showCollapseAll: false
   });
@@ -17,10 +17,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Auto-refresh: follow repository state from the built-in git extension (commits,
   // checkouts, pushes, fetches all fire onDidChange). Debounced — state changes burst.
   let timer: NodeJS.Timeout | undefined;
+  let interval: NodeJS.Timeout | undefined;
   const scheduleRefresh = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => tree.refresh(), 400);
   };
+  const configureBackgroundRefresh = () => {
+    if (interval) clearInterval(interval);
+    interval = undefined;
+
+    const minutes = vscode.workspace.getConfiguration('goodBranchManager').get<number>('refreshIntervalMins', 0);
+    if (minutes > 0) {
+      interval = setInterval(() => tree.refresh(), minutes * 60 * 1000);
+    }
+  };
+  configureBackgroundRefresh();
+  context.subscriptions.push({
+    dispose: () => {
+      if (timer) clearTimeout(timer);
+      if (interval) clearInterval(interval);
+    }
+  });
   const gitExt = vscode.extensions.getExtension('vscode.git');
   if (gitExt) {
     const api = (await gitExt.activate()).getAPI(1);
@@ -34,7 +51,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('gitBranchPr')) scheduleRefresh();
+      if (e.affectsConfiguration('goodBranchManager.refreshIntervalMins')) configureBackgroundRefresh();
+      if (e.affectsConfiguration('goodBranchManager')) scheduleRefresh();
     })
   );
 
@@ -52,10 +70,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('gitBranchPr.refresh', () => tree.refresh())
+    vscode.commands.registerCommand('goodBranchManager.refresh', () => tree.refresh())
   );
 
-  register('gitBranchPr.checkout', async (node) => {
+  register('goodBranchManager.checkout', async (node) => {
     const git = requireGit(tree);
     const b = node.branch;
     if (b.isRemote) {
@@ -68,7 +86,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.setStatusBarMessage(`Checked out ${b.isRemote ? b.shortName : b.name}`, 4000);
   });
 
-  register('gitBranchPr.createBranchFrom', async (node) => {
+  register('goodBranchManager.createBranchFrom', async (node) => {
     const git = requireGit(tree);
     const source = node.branch.name;
     const name = await vscode.window.showInputBox({
@@ -85,7 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.setStatusBarMessage(`Created and checked out ${name.trim()}`, 4000);
   });
 
-  register('gitBranchPr.openOnGitHub', async (node) => {
+  register('goodBranchManager.openOnGitHub', async (node) => {
     const git = requireGit(tree);
     const repo = await resolveRemoteRepo(git, node.branch.remote ?? 'origin');
     if (!repo) {
@@ -100,7 +118,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await vscode.env.openExternal(vscode.Uri.parse(branchUrl(repo, remoteBranch)));
   });
 
-  register('gitBranchPr.renameBranch', async (node) => {
+  register('goodBranchManager.renameBranch', async (node) => {
     const git = requireGit(tree);
     const oldName = node.branch.name;
     const newName = await vscode.window.showInputBox({
@@ -116,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     tree.refresh();
   });
 
-  register('gitBranchPr.mergeIntoCurrent', async (node) => {
+  register('goodBranchManager.mergeIntoCurrent', async (node) => {
     const git = requireGit(tree);
     const current = tree.getRepoInfo()?.headBranch ?? 'the current branch';
     const source = node.branch.name;
@@ -141,7 +159,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     tree.refresh();
   });
 
-  register('gitBranchPr.deleteBranch', async (node) => {
+  register('goodBranchManager.deleteBranch', async (node) => {
     const git = requireGit(tree);
     const b = node.branch;
 
@@ -198,7 +216,109 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     tree.refresh();
   });
 
-  register('gitBranchPr.createPullRequest', async (node) => {
+  register('goodBranchManager.pullBranch', async (node) => {
+    const git = requireGit(tree);
+    const b = node.branch;
+    if (b.isRemote) return;
+    if (!b.isCurrent) {
+      vscode.window.showWarningMessage('Pull only runs on the checked-out branch. Checkout this branch first.');
+      return;
+    }
+    if (!b.upstream || b.upstreamGone) {
+      vscode.window.showWarningMessage(`${b.name} does not have an active upstream to pull from.`);
+      return;
+    }
+
+    const option = await vscode.window.showQuickPick(
+      [
+        { label: 'Pull --rebase', args: ['pull', '--rebase'], description: 'Replay local commits on top of the upstream branch' },
+        { label: 'Pull', args: ['pull'], description: 'Merge upstream changes into the current branch' },
+        { label: 'Pull --ff-only', args: ['pull', '--ff-only'], description: 'Only update when a fast-forward is possible' }
+      ],
+      { placeHolder: `Pull updates for ${b.name} from ${b.upstream}` }
+    );
+    if (!option) return;
+    await git.exec(option.args);
+    tree.refresh();
+    vscode.window.setStatusBarMessage(`${option.label} completed for ${b.name}`, 4000);
+  });
+
+  register('goodBranchManager.setUpstream', async (node) => {
+    const git = requireGit(tree);
+    const b = node.branch;
+    if (b.isRemote) return;
+
+    const remoteBranches = await git.getRemoteBranches();
+    const custom = '$(edit) Enter upstream manually...';
+    const picked = await vscode.window.showQuickPick(
+      [
+        ...remoteBranches.map((name) => ({
+          label: name,
+          description: name === b.upstream ? 'current upstream' : undefined
+        })),
+        { label: custom }
+      ],
+      { placeHolder: `Choose upstream for ${b.name}` }
+    );
+    if (!picked) return;
+
+    let upstream = picked.label;
+    if (upstream === custom) {
+      const input = await vscode.window.showInputBox({
+        prompt: `Upstream for ${b.name}`,
+        placeHolder: 'origin/feature/my-change',
+        value: b.upstream ?? `origin/${b.name}`,
+        validateInput: (v) => !v.trim() || !v.includes('/') ? 'Use the form remote/branch.' : undefined
+      });
+      if (!input) return;
+      upstream = input.trim();
+    }
+
+    await git.exec(['branch', '--set-upstream-to', upstream, b.name]);
+    tree.refresh();
+    vscode.window.setStatusBarMessage(`Set upstream for ${b.name} to ${upstream}`, 4000);
+  });
+
+  register('goodBranchManager.unsetUpstream', async (node) => {
+    const git = requireGit(tree);
+    const b = node.branch;
+    if (b.isRemote) return;
+    if (!b.upstream) {
+      vscode.window.showInformationMessage(`${b.name} does not have an upstream.`);
+      return;
+    }
+    const confirm = await vscode.window.showWarningMessage(
+      `Remove upstream ${b.upstream} from ${b.name}?`,
+      { modal: true },
+      'Remove Upstream'
+    );
+    if (confirm !== 'Remove Upstream') return;
+    await git.exec(['branch', '--unset-upstream', b.name]);
+    tree.refresh();
+  });
+
+  register('goodBranchManager.setDefaultBranch', async (node) => {
+    const branch = node.branch.isRemote ? node.branch.shortName : node.branch.name;
+    await vscode.workspace.getConfiguration('goodBranchManager').update(
+      'defaultBranch',
+      branch,
+      vscode.ConfigurationTarget.Workspace
+    );
+    tree.refresh();
+    vscode.window.setStatusBarMessage(`Set default branch to ${branch}`, 4000);
+  });
+
+  register('goodBranchManager.clearDefaultBranch', async () => {
+    await vscode.workspace.getConfiguration('goodBranchManager').update(
+      'defaultBranch',
+      undefined,
+      vscode.ConfigurationTarget.Workspace
+    );
+    tree.refresh();
+    vscode.window.setStatusBarMessage('Cleared configured default branch', 4000);
+  });
+
+  register('goodBranchManager.createPullRequest', async (node) => {
     const git = requireGit(tree);
     const info = tree.getRepoInfo();
     if (!info) return;
