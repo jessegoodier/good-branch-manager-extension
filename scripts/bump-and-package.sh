@@ -14,14 +14,15 @@ echo "Bumping $BUMP version..."
 npm version "$BUMP" --no-git-tag-version > /dev/null
 
 VERSION=$(node -p "require('./package.json').version")
+NAME=$(node -p "require('./package.json').name")
 echo "Version -> $VERSION"
 
-echo "Compiling..."
-npm run compile
+echo "Building..."
+npm run build
 
 echo "Packaging..."
 npx @vscode/vsce package
 
 echo ""
-echo "Done: git-branch-pr-$VERSION.vsix"
-echo "Install with: code --install-extension git-branch-pr-$VERSION.vsix"
+echo "Done: $NAME-$VERSION.vsix"
+echo "Install with: code --install-extension $NAME-$VERSION.vsix"
