@@ -1,0 +1,202 @@
+{
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "bugs": {
+    "url": "https://github.com/jessegoodier/good-branch-manager/issues"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.refresh",
+        "icon": "$(refresh)",
+        "title": "Refresh Branches"
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.checkout",
+        "title": "Checkout Branch"
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.createBranchFrom",
+        "title": "Create Branch From This..."
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.openOnGitHub",
+        "enablement": "viewItem =~ /upstream|remote/",
+        "title": "Open Branch on GitHub"
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.createPullRequest",
+        "title": "Create Pull Request..."
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.renameBranch",
+        "title": "Rename Branch..."
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.mergeIntoCurrent",
+        "title": "Merge Into Current Branch"
+      },
+      {
+        "category": "Branches",
+        "command": "gitBranchPr.deleteBranch",
+        "title": "Delete Branch..."
+      }
+    ],
+    "configuration": {
+      "properties": {
+        "gitBranchPr.branchScope": {
+          "default": "both",
+          "description": "Which branches to show in the Branches view.",
+          "enum": [
+            "both",
+            "local"
+          ],
+          "enumDescriptions": [
+            "Show local branches and remote branches in two collapsible groups.",
+            "Show only local branches."
+          ],
+          "type": "string"
+        },
+        "gitBranchPr.staleAfterDays": {
+          "default": 30,
+          "description": "Mark a branch as stale when its last commit is older than this many days. Set to 0 to disable.",
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "title": "Branch Manager & PRs"
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "gitBranchPr.checkout",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.createBranchFrom",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.openOnGitHub",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.createPullRequest",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.renameBranch",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.mergeIntoCurrent",
+          "when": "false"
+        },
+        {
+          "command": "gitBranchPr.deleteBranch",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitBranchPr.checkout",
+          "group": "1_nav@1",
+          "when": "view == gitBranchPr.branches && viewItem =~ /branch/ && !(viewItem =~ /current/)"
+        },
+        {
+          "command": "gitBranchPr.createBranchFrom",
+          "group": "1_nav@2",
+          "when": "view == gitBranchPr.branches && viewItem =~ /branch/"
+        },
+        {
+          "command": "gitBranchPr.openOnGitHub",
+          "group": "2_github@1",
+          "when": "view == gitBranchPr.branches && viewItem =~ /branch/"
+        },
+        {
+          "command": "gitBranchPr.createPullRequest",
+          "group": "2_github@2",
+          "when": "view == gitBranchPr.branches && viewItem =~ /local/"
+        },
+        {
+          "command": "gitBranchPr.renameBranch",
+          "group": "3_modify@1",
+          "when": "view == gitBranchPr.branches && viewItem =~ /local/"
+        },
+        {
+          "command": "gitBranchPr.mergeIntoCurrent",
+          "group": "3_modify@2",
+          "when": "view == gitBranchPr.branches && viewItem =~ /branch/ && !(viewItem =~ /current/)"
+        },
+        {
+          "command": "gitBranchPr.deleteBranch",
+          "group": "4_danger@1",
+          "when": "view == gitBranchPr.branches && viewItem =~ /branch/ && !(viewItem =~ /current/)"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gitBranchPr.refresh",
+          "group": "navigation",
+          "when": "view == gitBranchPr.branches"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "contextualTitle": "Branches",
+          "icon": "$(git-branch)",
+          "id": "gitBranchPr.branches",
+          "name": "Branches"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "contents": "No git repository found in this workspace.\nOpen a folder that contains a git repository to see its branches.",
+        "view": "gitBranchPr.branches"
+      }
+    ]
+  },
+  "description": "Simple git branch view: sync status at a glance, branch actions, and GitHub pull requests from the Source Control sidebar.",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "1.107.0",
+    "typescript": "^5.6.0"
+  },
+  "displayName": "Good Branch Manager",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "homepage": "https://github.com/jessegoodier/good-branch-manager#readme",
+  "license": "MIT",
+  "main": "./out/extension.js",
+  "name": "git-branch-pr",
+  "publisher": "JesseGoodier",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jessegoodier/good-branch-manager.git"
+  },
+  "scripts": {
+    "compile": "node ./node_modules/typescript/lib/tsc.js -p ./",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node ./node_modules/typescript/lib/tsc.js -watch -p ./"
+  },
+  "version": "0.1.9"
+}
