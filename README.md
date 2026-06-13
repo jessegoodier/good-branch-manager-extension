@@ -2,7 +2,7 @@
 
 A modern, simple branch view for VS Code (1.107+). Lives in the **Source Control** sidebar as a "Branches" section.
 
-![screenshot](git-branch-pr-screenshot.png)
+![screenshot](good-branch-manager.png)
 
 ## Features
 

@@ -170,24 +170,28 @@ export class Git {
     const s = url.trim();
     let host: string, path: string;
 
-    // SCP-style SSH: git@host:path/to/repo.git  (Azure SSH has no @: ssh.dev.azure.com:v3/...)
-    const scpMatch = /^(?:[^@\s]+@)?([A-Za-z0-9._-]+):([^:].+?)(?:\.git)?\/?$/.exec(s);
-    // HTTPS / git+https: https://[user@]host/path.git
-    const httpsMatch = /^(?:https?|git):\/\/(?:[^@/\s]+@)?([A-Za-z0-9._-]+)\/(.+?)(?:\.git)?\/?$/.exec(s);
-
-    if (scpMatch) {
-      [, host, path] = scpMatch;
-    } else if (httpsMatch) {
-      [, host, path] = httpsMatch;
+    // Scheme-based URLs: scheme://[user@]host[:port]/path.git
+    const schemeMatch = /^(?:[a-z0-9+.-]+):\/\/(?:[^@/\s]+@)?([A-Za-z0-9._-]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i.exec(s);
+    if (schemeMatch) {
+      [, host, path] = schemeMatch;
     } else {
-      return undefined;
+      // SCP-style SSH: git@host:path/to/repo.git  (Azure SSH has no @: ssh.dev.azure.com:v3/...)
+      const scpMatch = /^(?:[^@\s]+@)?([A-Za-z0-9._-]+):([^:].+?)(?:\.git)?\/?$/.exec(s);
+      if (scpMatch) {
+        [, host, path] = scpMatch;
+      } else {
+        return undefined;
+      }
     }
 
     const provider = detectProvider(host, path);
 
-    // Azure DevOps SSH: ssh.dev.azure.com:v3/org/project/repo → strip the "v3/" prefix
-    if (provider === 'azure' && path.startsWith('v3/')) {
-      path = path.slice(3);
+    // Azure DevOps SSH/HTTPS path normalisation
+    if (provider === 'azure') {
+      if (path.startsWith('v3/')) {
+        path = path.slice(3);
+      }
+      path = path.replace(/\/_git(?=\/|$)/, '');
     }
 
     const parts = path.split('/').filter(Boolean);
