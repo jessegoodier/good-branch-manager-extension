@@ -1,6 +1,6 @@
 {
   "name": "good-branch-manager",
-  "version": "0.1.21",
+  "version": "0.1.23",
   "description": "Simple git branch view: sync status at a glance, branch actions, and GitHub pull requests from the Source Control sidebar.",
   "homepage": "https://github.com/jessegoodier/good-branch-manager-extension#readme",
   "publisher": "JesseGoodier",
@@ -78,16 +78,6 @@
         "category": "Branches",
         "command": "goodBranchManager.unsetUpstream",
         "title": "Remove Upstream..."
-      },
-      {
-        "category": "Branches",
-        "command": "goodBranchManager.setDefaultBranch",
-        "title": "Set as Default Branch"
-      },
-      {
-        "category": "Branches",
-        "command": "goodBranchManager.clearDefaultBranch",
-        "title": "Clear Default Branch Override"
       }
     ],
     "configuration": {
@@ -106,13 +96,13 @@
           "type": "string"
         },
         "goodBranchManager.staleAfterDays": {
-          "default": 30,
+          "default": 10,
           "description": "Mark a branch as stale when its last commit is older than this many days. Set to 0 to disable.",
           "minimum": 0,
           "type": "number"
         },
         "goodBranchManager.refreshIntervalMins": {
-          "default": 0,
+          "default": 1,
           "description": "Refresh the Branches view in the background every N minutes. Set to 0 to disable periodic refresh. Git repository state changes still refresh automatically.",
           "minimum": 0,
           "type": "number"
@@ -166,14 +156,6 @@
         {
           "command": "goodBranchManager.unsetUpstream",
           "when": "false"
-        },
-        {
-          "command": "goodBranchManager.setDefaultBranch",
-          "when": "false"
-        },
-        {
-          "command": "goodBranchManager.clearDefaultBranch",
-          "when": "false"
         }
       ],
       "view/item/context": [
@@ -195,12 +177,12 @@
         {
           "command": "goodBranchManager.createPullRequest",
           "group": "2_github@2",
-          "when": "view == goodBranchManager.branches && viewItem =~ /local/"
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch-local/"
         },
         {
           "command": "goodBranchManager.renameBranch",
           "group": "3_modify@1",
-          "when": "view == goodBranchManager.branches && viewItem =~ /local/"
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch-local/"
         },
         {
           "command": "goodBranchManager.mergeIntoCurrent",
@@ -210,27 +192,17 @@
         {
           "command": "goodBranchManager.pullBranch",
           "group": "3_modify@3",
-          "when": "view == goodBranchManager.branches && viewItem =~ /local/ && viewItem =~ /current/ && viewItem =~ /upstream/"
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch-local/ && viewItem =~ /current/ && viewItem =~ /upstream/"
         },
         {
           "command": "goodBranchManager.setUpstream",
           "group": "3_modify@4",
-          "when": "view == goodBranchManager.branches && viewItem =~ /local/"
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch-local/"
         },
         {
           "command": "goodBranchManager.unsetUpstream",
           "group": "3_modify@5",
-          "when": "view == goodBranchManager.branches && viewItem =~ /local/ && viewItem =~ /upstream/"
-        },
-        {
-          "command": "goodBranchManager.setDefaultBranch",
-          "group": "3_modify@6",
-          "when": "view == goodBranchManager.branches && viewItem =~ /branch/ && !(viewItem =~ /default/)"
-        },
-        {
-          "command": "goodBranchManager.clearDefaultBranch",
-          "group": "3_modify@7",
-          "when": "view == goodBranchManager.branches && viewItem =~ /default/"
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch-local/ && viewItem =~ /upstream/"
         },
         {
           "command": "goodBranchManager.deleteBranch",

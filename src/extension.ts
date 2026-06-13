@@ -297,27 +297,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     tree.refresh();
   });
 
-  register('goodBranchManager.setDefaultBranch', async (node) => {
-    const branch = node.branch.isRemote ? node.branch.shortName : node.branch.name;
-    await vscode.workspace.getConfiguration('goodBranchManager').update(
-      'defaultBranch',
-      branch,
-      vscode.ConfigurationTarget.Workspace
-    );
-    tree.refresh();
-    vscode.window.setStatusBarMessage(`Set default branch to ${branch}`, 4000);
-  });
-
-  register('goodBranchManager.clearDefaultBranch', async () => {
-    await vscode.workspace.getConfiguration('goodBranchManager').update(
-      'defaultBranch',
-      undefined,
-      vscode.ConfigurationTarget.Workspace
-    );
-    tree.refresh();
-    vscode.window.setStatusBarMessage('Cleared configured default branch', 4000);
-  });
-
   register('goodBranchManager.createPullRequest', async (node) => {
     const git = requireGit(tree);
     const info = tree.getRepoInfo();
