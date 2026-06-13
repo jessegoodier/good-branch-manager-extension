@@ -153,8 +153,8 @@ export class Git {
     const local = parse(localRaw, false);
     const localUpstreams = new Set(local.map((b) => b.upstream).filter(Boolean));
     const remote = parse(remoteRaw ?? '', true).filter(
-      // Skip symbolic refs like origin/HEAD and remote branches already tracked locally.
-      (b) => b.shortName !== 'HEAD' && !localUpstreams.has(b.name)
+      // Skip symbolic/container refs like origin or origin/HEAD and remote branches already tracked locally.
+      (b) => b.shortName && b.shortName !== 'HEAD' && !localUpstreams.has(b.name)
     );
 
     const headBranch = local.find((b) => b.isCurrent)?.name;
