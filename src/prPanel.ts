@@ -16,10 +16,12 @@ export async function openCreatePrPanel(
   branch: Branch,
   defaultBranch: string,
   localBranches: Branch[],
-  onCreated: () => void
+  onCreated: () => void,
+  remote = 'origin',
+  onPublished?: (upstream: string) => void | Promise<void>
 ): Promise<void> {
   const base = defaultBranch;
-  const commits = await git.getCommitSummaries(`origin/${base}`, branch.name);
+  const commits = await git.getCommitSummaries(`${remote}/${base}`, branch.name);
   const title =
     commits.length === 1 ? commits[0] : prettifyBranchName(branch.name);
   const body =
@@ -63,17 +65,28 @@ export async function openCreatePrPanel(
     try {
       panel.webview.postMessage({ type: 'busy' });
       // Make sure the branch exists on the remote and is up to date before opening the PR.
-      await git.exec(['push', '--set-upstream', 'origin', branch.name]);
+      await git.exec(['push', '--set-upstream', remote, branch.name]);
+      await onPublished?.(`${remote}/${branch.name}`);
       const pr = await createPullRequest(repo, input);
       panel.dispose();
       onCreated();
       const open = 'Open in Browser';
+      const checkoutBase = `Checkout ${input.base}`;
       const picked = await vscode.window.showInformationMessage(
         `Pull request #${pr.number} created.`,
-        open
+        open,
+        checkoutBase
       );
       if (picked === open) {
         await vscode.env.openExternal(vscode.Uri.parse(pr.htmlUrl));
+      } else if (picked === checkoutBase) {
+        try {
+          await git.exec(['switch', input.base]);
+          onCreated();
+          vscode.window.setStatusBarMessage(`Checked out ${input.base}`, 4000);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Branches: ${err?.message ?? String(err)}`);
+        }
       }
     } catch (err: any) {
       panel.webview.postMessage({ type: 'error', message: err?.message ?? String(err) });
