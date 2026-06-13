@@ -16,10 +16,12 @@ export async function openCreatePrPanel(
   branch: Branch,
   defaultBranch: string,
   localBranches: Branch[],
-  onCreated: () => void
+  onCreated: () => void,
+  remote = 'origin',
+  onPublished?: (upstream: string) => void | Promise<void>
 ): Promise<void> {
   const base = defaultBranch;
-  const commits = await git.getCommitSummaries(`origin/${base}`, branch.name);
+  const commits = await git.getCommitSummaries(`${remote}/${base}`, branch.name);
   const title =
     commits.length === 1 ? commits[0] : prettifyBranchName(branch.name);
   const body =
@@ -63,7 +65,8 @@ export async function openCreatePrPanel(
     try {
       panel.webview.postMessage({ type: 'busy' });
       // Make sure the branch exists on the remote and is up to date before opening the PR.
-      await git.exec(['push', '--set-upstream', 'origin', branch.name]);
+      await git.exec(['push', '--set-upstream', remote, branch.name]);
+      await onPublished?.(`${remote}/${branch.name}`);
       const pr = await createPullRequest(repo, input);
       panel.dispose();
       onCreated();

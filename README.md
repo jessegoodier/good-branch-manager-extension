@@ -19,6 +19,7 @@ A simple branch manager focused on the most common workflows when using git. Liv
   - *Set/Remove Upstream...*
   - *Delete Branch...* (optionally cleans up the remote counterpart)
 - **Automatic & background refresh**: Auto-refreshes on repository changes (commits, checkouts, pushes/fetches).
+- **Publish-to-PR prompt**: When the checked-out branch is first published to GitHub, asks whether to create a pull request.
 - **Stale & merged hints**: Shows last commit age and flags merged or stale branches.
 
 ## Settings
@@ -29,6 +30,7 @@ A simple branch manager focused on the most common workflows when using git. Liv
 | `goodBranchManager.staleAfterDays` | `30` | Days without commits before a branch is tagged stale (0 disables) |
 | `goodBranchManager.refreshIntervalMins` | `0` | Background refresh interval in minutes (0 disables) |
 | `goodBranchManager.defaultBranch` | `""` | Override the detected default branch used for merge/PR defaults |
+| `goodBranchManager.promptForPrOnPublish` | `true` | Ask whether to create a GitHub pull request after publishing the checked-out branch |
 
 ## Development
 

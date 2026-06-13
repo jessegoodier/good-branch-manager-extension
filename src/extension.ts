@@ -1,10 +1,16 @@
 import * as vscode from 'vscode';
-import { Branch, Git, GitError } from './git';
+import { Branch, Git, GitError, RepoInfo } from './git';
 import { branchUrl, resolveGitHubRepo, resolveRemoteRepo } from './github';
 import { openCreatePrPanel } from './prPanel';
 import { BranchNode, BranchTreeProvider } from './tree';
 
 const BRANCH_NAME_RE = /^(?!\/|.*(?:\/\.|\/\/|\.\.|@\{|\\))[^\x00-\x20~^:?*[\]]+(?<!\.lock)(?<!\/)(?<!\.)$/;
+const PUBLISH_PROMPT_SETTING = 'goodBranchManager.promptForPrOnPublish';
+
+interface BranchSnapshot {
+  upstream?: string;
+  upstreamGone: boolean;
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const tree = new BranchTreeProvider();
@@ -18,9 +24,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // checkouts, pushes, fetches all fire onDidChange). Debounced — state changes burst.
   let timer: NodeJS.Timeout | undefined;
   let interval: NodeJS.Timeout | undefined;
+  const publishPromptTimers = new Map<string, NodeJS.Timeout>();
+  const branchSnapshots = new Map<string, Map<string, BranchSnapshot>>();
+  const suppressedPublishPrompts = new Set<string>();
   const scheduleRefresh = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => tree.refresh(), 400);
+  };
+  const schedulePublishPromptCheck = (repoRoot: string | undefined) => {
+    if (!repoRoot) return;
+    const existing = publishPromptTimers.get(repoRoot);
+    if (existing) clearTimeout(existing);
+    const next = setTimeout(() => {
+      publishPromptTimers.delete(repoRoot);
+      void checkForPublishedBranch(context, tree, repoRoot, branchSnapshots, suppressedPublishPrompts);
+    }, 1000);
+    publishPromptTimers.set(repoRoot, next);
   };
   const configureBackgroundRefresh = () => {
     if (interval) clearInterval(interval);
@@ -36,12 +55,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     dispose: () => {
       if (timer) clearTimeout(timer);
       if (interval) clearInterval(interval);
+      for (const promptTimer of publishPromptTimers.values()) {
+        clearTimeout(promptTimer);
+      }
     }
   });
   const gitExt = vscode.extensions.getExtension('vscode.git');
   if (gitExt) {
     const api = (await gitExt.activate()).getAPI(1);
-    const hook = (repo: any) => context.subscriptions.push(repo.state.onDidChange(scheduleRefresh));
+    const hook = (repo: any) => {
+      const repoRoot = repo?.rootUri?.fsPath as string | undefined;
+      schedulePublishPromptCheck(repoRoot);
+      context.subscriptions.push(repo.state.onDidChange(() => {
+        scheduleRefresh();
+        schedulePublishPromptCheck(repoRoot);
+      }));
+    };
     api.repositories.forEach(hook);
     context.subscriptions.push(api.onDidOpenRepository((repo: any) => {
       hook(repo);
@@ -276,6 +305,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     await git.exec(['branch', '--set-upstream-to', upstream, b.name]);
+    suppressPublishPrompt(suppressedPublishPrompts, git.repoRoot, b.name, upstream);
     tree.refresh();
     vscode.window.setStatusBarMessage(`Set upstream for ${b.name} to ${upstream}`, 4000);
   });
@@ -302,18 +332,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const git = requireGit(tree);
     const info = tree.getRepoInfo();
     if (!info) return;
-    const repo = await resolveGitHubRepo(git);
-    if (!repo) {
-      vscode.window.showWarningMessage('Creating a PR requires a GitHub "origin" remote.');
-      return;
-    }
-    if (node.branch.name === info.defaultBranch) {
-      vscode.window.showWarningMessage(
-        `${node.branch.name} is the default branch — create a PR from a feature branch instead.`
-      );
-      return;
-    }
-    await openCreatePrPanel(git, repo, node.branch, info.defaultBranch, info.local, () => tree.refresh());
+    await openCreatePullRequestPanel(git, info, node.branch, () => tree.refresh(), {
+      onPublished: (upstream) => suppressPublishPrompt(suppressedPublishPrompts, git.repoRoot, node.branch.name, upstream)
+    });
   });
 
   register('goodBranchManager.openPullRequest', async (node) => {
@@ -332,6 +353,124 @@ function requireGit(tree: BranchTreeProvider): Git {
   const git = tree.getGit();
   if (!git) throw new Error('No git repository found in this workspace.');
   return git;
+}
+
+async function checkForPublishedBranch(
+  context: vscode.ExtensionContext,
+  tree: BranchTreeProvider,
+  repoRoot: string,
+  snapshots: Map<string, Map<string, BranchSnapshot>>,
+  suppressedPrompts: Set<string>
+): Promise<void> {
+  const git = new Git(repoRoot);
+  let info: RepoInfo;
+  try {
+    info = await git.getBranches();
+  } catch (err) {
+    console.error('goodBranchManager: failed to inspect branches for publish prompt', err);
+    return;
+  }
+
+  const previous = snapshots.get(repoRoot);
+  const next = snapshotBranches(info.local);
+  snapshots.set(repoRoot, next);
+  if (!previous) return;
+
+  const enabled = vscode.workspace.getConfiguration('goodBranchManager').get<boolean>('promptForPrOnPublish', true);
+  if (!enabled) return;
+
+  const branch = info.local.find((b) => b.isCurrent);
+  if (!branch || branch.name === info.defaultBranch || !branch.upstream || branch.upstreamGone) return;
+
+  const before = previous.get(branch.name);
+  if (!before || before.upstream || before.upstreamGone) return;
+  if (tree.getRepoInfo()?.root === repoRoot && tree.getPullRequest(branch.name)) return;
+
+  const remote = getBranchRemote(branch);
+  const repo = await resolveGitHubRepo(git, remote);
+  if (!repo) return;
+
+  const transitionKey = publishPromptKey(repoRoot, branch.name, branch.upstream);
+  if (suppressedPrompts.delete(transitionKey)) return;
+
+  const promptKey = `goodBranchManager.prPrompt.${transitionKey}`;
+  if (context.workspaceState.get<boolean>(promptKey)) return;
+  await context.workspaceState.update(promptKey, true);
+
+  const create = 'Create PR';
+  const notNow = 'Not Now';
+  const dontAsk = "Don't Ask Again";
+  const picked = await vscode.window.showInformationMessage(
+    `Branch ${branch.name} was published to ${branch.upstream}. Create a pull request?`,
+    create,
+    notNow,
+    dontAsk
+  );
+
+  if (picked === dontAsk) {
+    await vscode.workspace.getConfiguration('goodBranchManager').update(PUBLISH_PROMPT_SETTING, false, vscode.ConfigurationTarget.Global);
+    return;
+  }
+  if (picked === create) {
+    await openCreatePullRequestPanel(git, info, branch, () => tree.refresh(), { remote });
+  }
+}
+
+function snapshotBranches(branches: Branch[]): Map<string, BranchSnapshot> {
+  return new Map(
+    branches.map((branch) => [
+      branch.name,
+      {
+        upstream: branch.upstream,
+        upstreamGone: branch.upstreamGone
+      }
+    ])
+  );
+}
+
+async function openCreatePullRequestPanel(
+  git: Git,
+  info: Pick<RepoInfo, 'defaultBranch' | 'local'>,
+  branch: Branch,
+  onCreated: () => void,
+  options: {
+    remote?: string;
+    onPublished?: (upstream: string) => void | Promise<void>;
+  } = {}
+): Promise<void> {
+  const remote = options.remote ?? getBranchRemote(branch);
+  const repo = await resolveGitHubRepo(git, remote);
+  if (!repo) {
+    vscode.window.showWarningMessage(`Creating a PR requires a GitHub "${remote}" remote.`);
+    return;
+  }
+  if (branch.name === info.defaultBranch) {
+    vscode.window.showWarningMessage(
+      `${branch.name} is the default branch — create a PR from a feature branch instead.`
+    );
+    return;
+  }
+  await openCreatePrPanel(git, repo, branch, info.defaultBranch, info.local, onCreated, remote, options.onPublished);
+}
+
+function getBranchRemote(branch: Branch): string {
+  if (branch.upstream) {
+    return branch.upstream.split('/')[0];
+  }
+  return branch.remote ?? 'origin';
+}
+
+function suppressPublishPrompt(
+  suppressedPrompts: Set<string>,
+  repoRoot: string,
+  branchName: string,
+  upstream: string
+): void {
+  suppressedPrompts.add(publishPromptKey(repoRoot, branchName, upstream));
+}
+
+function publishPromptKey(repoRoot: string, branchName: string, upstream: string): string {
+  return `${repoRoot}:${branchName}:${upstream}`;
 }
 
 export function deactivate(): void { }
