@@ -231,8 +231,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const option = await vscode.window.showQuickPick(
       [
+        { label: 'Pull (Default)', args: ['pull'], description: 'Run pull using configured git default (merge or rebase)' },
         { label: 'Pull --rebase', args: ['pull', '--rebase'], description: 'Replay local commits on top of the upstream branch' },
-        { label: 'Pull', args: ['pull'], description: 'Merge upstream changes into the current branch' },
+        { label: 'Pull --no-rebase', args: ['pull', '--no-rebase'], description: 'Explicitly merge upstream changes, creating a merge commit' },
         { label: 'Pull --ff-only', args: ['pull', '--ff-only'], description: 'Only update when a fast-forward is possible' }
       ],
       { placeHolder: `Pull updates for ${b.name} from ${b.upstream}` }
@@ -295,27 +296,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (confirm !== 'Remove Upstream') return;
     await git.exec(['branch', '--unset-upstream', b.name]);
     tree.refresh();
-  });
-
-  register('goodBranchManager.setDefaultBranch', async (node) => {
-    const branch = node.branch.isRemote ? node.branch.shortName : node.branch.name;
-    await vscode.workspace.getConfiguration('goodBranchManager').update(
-      'defaultBranch',
-      branch,
-      vscode.ConfigurationTarget.Workspace
-    );
-    tree.refresh();
-    vscode.window.setStatusBarMessage(`Set default branch to ${branch}`, 4000);
-  });
-
-  register('goodBranchManager.clearDefaultBranch', async () => {
-    await vscode.workspace.getConfiguration('goodBranchManager').update(
-      'defaultBranch',
-      undefined,
-      vscode.ConfigurationTarget.Workspace
-    );
-    tree.refresh();
-    vscode.window.setStatusBarMessage('Cleared configured default branch', 4000);
   });
 
   register('goodBranchManager.createPullRequest', async (node) => {
