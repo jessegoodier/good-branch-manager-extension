@@ -208,7 +208,6 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     ctx.push(b.isRemote ? 'remote' : 'local');
     if (b.upstream && !b.upstreamGone) ctx.push('upstream');
     if (b.isCurrent) ctx.push('current');
-    if (!b.isCurrent) ctx.push('not-current');
     if (!b.isRemote && b.name === node.repo.defaultBranch) ctx.push('default');
     if (pr) ctx.push('has-pr');
     item.contextValue = ctx.join('-');
