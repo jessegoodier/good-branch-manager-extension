@@ -4,6 +4,18 @@ A simple branch manager focused on the most common workflows when using git. Liv
 
 ![Good Branch Manager branch tooltip screenshot](screenshot-tooltip.png)
 
+## Installation
+
+Download the latest `.vsix` package from the [GitHub Releases](https://github.com/jessegoodier/good-branch-manager-extension/releases) page, then install it from VS Code by opening the Extensions view, clicking the three-dot menu, selecting "Install from VSIX...", and choosing the downloaded `.vsix` file.
+
+Or install it from the command line:
+
+```sh
+code --install-extension good-branch-manager-<version>.vsix
+```
+
+The release workflow packages each version and attaches the VSIX package to the release.
+
 ## Features
 
 - **Branch list** showing local and remote branches sorted by most recent commit, with the current branch highlighted.
