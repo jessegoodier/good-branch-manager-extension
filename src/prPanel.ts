@@ -71,12 +71,22 @@ export async function openCreatePrPanel(
       panel.dispose();
       onCreated();
       const open = 'Open in Browser';
+      const checkoutBase = `Checkout ${input.base}`;
       const picked = await vscode.window.showInformationMessage(
         `Pull request #${pr.number} created.`,
-        open
+        open,
+        checkoutBase
       );
       if (picked === open) {
         await vscode.env.openExternal(vscode.Uri.parse(pr.htmlUrl));
+      } else if (picked === checkoutBase) {
+        try {
+          await git.exec(['switch', input.base]);
+          onCreated();
+          vscode.window.setStatusBarMessage(`Checked out ${input.base}`, 4000);
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Branches: ${err?.message ?? String(err)}`);
+        }
       }
     } catch (err: any) {
       panel.webview.postMessage({ type: 'error', message: err?.message ?? String(err) });
