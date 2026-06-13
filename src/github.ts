@@ -103,3 +103,41 @@ export function branchUrl(repo: RemoteRepo, branch: string): string {
       return `${base}/${repo.owner}/${repo.repo}/src/branch/${enc}`;
   }
 }
+
+export interface PullRequest {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  mergedAt: string | null;
+  htmlUrl: string;
+  headRef: string;
+}
+
+export async function listPullRequests(repo: RemoteRepo): Promise<PullRequest[]> {
+  const session = await getGitHubSession(false);
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+  if (session) {
+    headers['Authorization'] = `Bearer ${session.accessToken}`;
+  }
+
+  const res = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.repo}/pulls?state=all&per_page=100`, {
+    headers
+  });
+
+  if (!res.ok) {
+    throw new Error(`GitHub API error ${res.status}: ${await res.text()}`);
+  }
+
+  const json = await res.json() as any[];
+  return json.map((pr: any) => ({
+    number: pr.number,
+    title: pr.title ?? '',
+    state: pr.state,
+    mergedAt: pr.merged_at || null,
+    htmlUrl: pr.html_url,
+    headRef: pr.head.ref
+  }));
+}

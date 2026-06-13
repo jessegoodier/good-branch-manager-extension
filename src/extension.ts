@@ -315,6 +315,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     await openCreatePrPanel(git, repo, node.branch, info.defaultBranch, info.local, () => tree.refresh());
   });
+
+  register('goodBranchManager.openPullRequest', async (node) => {
+    const b = node.branch;
+    const branchName = b.isRemote ? b.shortName : b.name;
+    const pr = tree.getPullRequest(branchName);
+    if (pr) {
+      await vscode.env.openExternal(vscode.Uri.parse(pr.htmlUrl));
+    } else {
+      vscode.window.showWarningMessage(`No pull request found for branch ${b.name}.`);
+    }
+  });
 }
 
 function requireGit(tree: BranchTreeProvider): Git {
