@@ -104,6 +104,32 @@ export function branchUrl(repo: RemoteRepo, branch: string): string {
   }
 }
 
+export function commitUrl(repo: RemoteRepo, sha: string): string {
+  const enc = encodeURIComponent(sha);
+  const base = `https://${repo.host}`;
+
+  switch (repo.provider) {
+    case 'github':
+      return `${base}/${repo.owner}/${repo.repo}/commit/${enc}`;
+
+    case 'gitlab':
+      return `${base}/${repo.owner}/${repo.repo}/-/commit/${enc}`;
+
+    case 'bitbucket':
+      return `${base}/${repo.owner}/${repo.repo}/commits/${enc}`;
+
+    case 'azure': {
+      const parts = repo.owner.split('/');
+      const org = parts[0];
+      const project = parts.slice(1).join('/') || repo.repo;
+      return `https://dev.azure.com/${org}/${project}/_git/${repo.repo}/commit/${enc}`;
+    }
+
+    default:
+      return `${base}/${repo.owner}/${repo.repo}/commit/${enc}`;
+  }
+}
+
 export interface PullRequest {
   number: number;
   title: string;

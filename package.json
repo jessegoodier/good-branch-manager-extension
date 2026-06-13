@@ -1,6 +1,6 @@
 {
   "name": "good-branch-manager",
-  "version": "0.1.29",
+  "version": "0.1.33",
   "description": "Simple git branch view: sync status at a glance, branch actions, and GitHub pull requests from the Source Control sidebar.",
   "homepage": "https://github.com/jessegoodier/good-branch-manager-extension#readme",
   "publisher": "JesseGoodier",

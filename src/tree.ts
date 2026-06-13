@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { Branch, Git, RepoInfo, findRepoRoot } from './git';
-import { PullRequest, listPullRequests, resolveRemoteRepo } from './github';
+import { Branch, Git, RemoteRepo, RepoInfo, findRepoRoot } from './git';
+import { PullRequest, branchUrl, commitUrl, listPullRequests, resolveRemoteRepo } from './github';
 
 type Node = GroupNode | BranchNode;
 
@@ -19,6 +19,7 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
   private repoInfo: RepoInfo | undefined;
   private git: Git | undefined;
   private prMap = new Map<string, PullRequest>();
+  private remoteRepos = new Map<string, RemoteRepo>();
   private lastFetchTime = 0;
   private fetchPromise: Promise<void> | null = null;
   private isForceRefresh = false;
@@ -53,11 +54,13 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
       this.git = undefined;
       this.repoInfo = undefined;
       this.prMap.clear();
+      this.remoteRepos.clear();
       return [];
     }
     this.git = new Git(root);
     try {
       this.repoInfo = await this.git.getBranches();
+      await this.refreshRemoteRepos(this.git);
     } catch (err) {
       console.error('goodBranchManager: failed to list branches', err);
       return [];
@@ -189,9 +192,10 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
       `**${b.name}**`,
       '',
       `${status.tooltip}`,
-      `Last commit: ${b.committerDateRelative} (\`${b.sha}\`)`
+      `Last commit: ${this.linkedCommit(b)} ${b.committerDateRelative}`,
+      `Last Commit by: ${escapeMarkdown(b.authorName || 'Unknown')}`
     ];
-    if (b.upstream) lines.push(`Upstream: \`${b.upstream}\``);
+    if (b.upstream) lines.push(`Upstream: ${this.linkedUpstream(b.upstream)}`);
     if (!b.isRemote && b.name === node.repo.defaultBranch) lines.push('Default branch.');
     if (b.merged) lines.push('Already merged into the default branch.');
     if (isStale) lines.push(`Stale: no commits in over ${staleDays} days.`);
@@ -229,8 +233,8 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     if (b.isCurrent) {
       const extra = this.aheadBehindText(b);
       return {
-        text: ['current', extra].filter(Boolean).join(' '),
-        tooltip: 'This is the checked-out branch.' + (extra ? ` (${extra})` : ''),
+        text: extra || 'synced',
+        tooltip: ['This is the checked-out branch.', this.syncStateDescription(b)].join('\n\n'),
         icon: 'check',
         color: 'charts.green'
       };
@@ -269,4 +273,89 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     if (b.behind > 0) parts.push(`${b.behind}↓`);
     return parts.join(' ');
   }
+
+  private syncStateDescription(b: Branch): string {
+    if (!b.upstream) {
+      return 'Local only — never pushed to a remote.';
+    }
+    if (b.upstreamGone) {
+      return `Upstream ${b.upstream} is gone.`;
+    }
+    if (b.ahead === 0 && b.behind === 0) {
+      return `In sync with ${b.upstream}.`;
+    }
+
+    const parts: string[] = [];
+    if (b.ahead > 0) {
+      parts.push(`${b.ahead} commit${b.ahead === 1 ? '' : 's'} ahead of ${b.upstream}`);
+    }
+    if (b.behind > 0) {
+      parts.push(`${b.behind} commit${b.behind === 1 ? '' : 's'} behind ${b.upstream}`);
+    }
+    return parts.join(', ') + '.';
+  }
+
+  private async refreshRemoteRepos(git: Git): Promise<void> {
+    const next = new Map<string, RemoteRepo>();
+    try {
+      const remotesRaw = await git.exec(['remote']);
+      const remotes = remotesRaw.split('\n').map((remote) => remote.trim()).filter(Boolean);
+      for (const remote of remotes) {
+        const repo = await resolveRemoteRepo(git, remote);
+        if (repo) {
+          next.set(remote, repo);
+        }
+      }
+    } catch {
+      // Keep the branch list usable even when remotes cannot be inspected.
+    }
+    this.remoteRepos = next;
+  }
+
+  private linkedCommit(branch: Branch): string {
+    const label = escapeMarkdown(branch.sha);
+    if (!branch.isRemote && branch.ahead > 0) {
+      return `\`${label}\``;
+    }
+    const repo = this.remoteRepoForBranch(branch);
+    if (!repo) {
+      return `\`${label}\``;
+    }
+    return `[${label}](${commitUrl(repo, branch.fullSha || branch.sha)})`;
+  }
+
+  private linkedUpstream(upstream: string): string {
+    const { remote, branch } = splitRemoteBranch(upstream);
+    const label = escapeMarkdown(upstream);
+    const repo = this.remoteRepos.get(remote);
+    if (!repo) {
+      return `\`${label}\``;
+    }
+    return `[${label}](${branchUrl(repo, branch)})`;
+  }
+
+  private remoteRepoForBranch(branch: Branch): RemoteRepo | undefined {
+    if (branch.upstream) {
+      return this.remoteRepos.get(splitRemoteBranch(branch.upstream).remote);
+    }
+    if (branch.remote) {
+      return this.remoteRepos.get(branch.remote);
+    }
+    return undefined;
+  }
+}
+
+function splitRemoteBranch(ref: string): { remote: string; branch: string } {
+  const slash = ref.indexOf('/');
+  if (slash === -1) {
+    return { remote: 'origin', branch: ref };
+  }
+  return {
+    remote: ref.slice(0, slash),
+    branch: ref.slice(slash + 1)
+  };
+}
+
+function escapeMarkdown(value: string): string {
+  return value.replace(/([\\`*_{}[\]()#+\-.!|>])/g, '\\$1');
 }
