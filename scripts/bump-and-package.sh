@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+npm install
+
 BUMP="${1:-patch}"
 if [[ "$BUMP" != patch && "$BUMP" != minor && "$BUMP" != major ]]; then
   echo "Usage: $0 [patch|minor|major]" >&2

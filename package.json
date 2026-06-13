@@ -1,6 +1,6 @@
 {
   "name": "good-branch-manager",
-  "version": "0.1.24",
+  "version": "0.1.26",
   "description": "Simple git branch view: sync status at a glance, branch actions, and GitHub pull requests from the Source Control sidebar.",
   "homepage": "https://github.com/jessegoodier/good-branch-manager-extension#readme",
   "publisher": "JesseGoodier",
@@ -78,6 +78,11 @@
         "category": "Branches",
         "command": "goodBranchManager.unsetUpstream",
         "title": "Remove Upstream..."
+      },
+      {
+        "category": "Branches",
+        "command": "goodBranchManager.openPullRequest",
+        "title": "Open Pull Request on GitHub"
       }
     ],
     "configuration": {
@@ -111,6 +116,11 @@
           "default": "",
           "description": "Override the default branch used by the Branches view and pull request form. Leave empty to auto-detect from origin/HEAD, main, master, or HEAD.",
           "type": "string"
+        },
+        "goodBranchManager.showPrStatus": {
+          "default": true,
+          "description": "Fetch pull request status from GitHub and show icons for merged/closed/open PRs.",
+          "type": "boolean"
         }
       },
       "title": "Branch Manager & PRs"
@@ -156,6 +166,10 @@
         {
           "command": "goodBranchManager.unsetUpstream",
           "when": "false"
+        },
+        {
+          "command": "goodBranchManager.openPullRequest",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -173,6 +187,11 @@
           "command": "goodBranchManager.openOnGitHub",
           "group": "2_github@1",
           "when": "view == goodBranchManager.branches && viewItem =~ /branch/"
+        },
+        {
+          "command": "goodBranchManager.openPullRequest",
+          "group": "2_github@1.5",
+          "when": "view == goodBranchManager.branches && viewItem =~ /branch/ && viewItem =~ /has-pr/"
         },
         {
           "command": "goodBranchManager.createPullRequest",

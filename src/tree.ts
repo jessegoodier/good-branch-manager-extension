@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Branch, Git, RepoInfo, findRepoRoot } from './git';
+import { PullRequest, listPullRequests, resolveRemoteRepo } from './github';
 
 type Node = GroupNode | BranchNode;
 
@@ -17,8 +18,17 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
 
   private repoInfo: RepoInfo | undefined;
   private git: Git | undefined;
+  private prMap = new Map<string, PullRequest>();
+  private lastFetchTime = 0;
+  private fetchPromise: Promise<void> | null = null;
+  private isForceRefresh = false;
+
+  getPullRequest(branchName: string): PullRequest | undefined {
+    return this.prMap.get(branchName);
+  }
 
   refresh(): void {
+    this.isForceRefresh = true;
     this._onDidChangeTreeData.fire();
   }
 
@@ -42,6 +52,7 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     if (!root) {
       this.git = undefined;
       this.repoInfo = undefined;
+      this.prMap.clear();
       return [];
     }
     this.git = new Git(root);
@@ -52,11 +63,68 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
       return [];
     }
 
+    this.triggerPrFetch(this.git);
+
     const scope = vscode.workspace.getConfiguration('goodBranchManager').get<string>('branchScope', 'both');
     if (scope === 'local' || this.repoInfo.remote.length === 0) {
       return this.repoInfo.local.map((b) => new BranchNode(b, this.repoInfo!));
     }
     return [new GroupNode('local', this.repoInfo.local), new GroupNode('remote', this.repoInfo.remote)];
+  }
+
+  private async triggerPrFetch(git: Git): Promise<void> {
+    const showPrStatus = vscode.workspace.getConfiguration('goodBranchManager').get<boolean>('showPrStatus', true);
+    if (!showPrStatus) {
+      return;
+    }
+
+    const now = Date.now();
+    const throttleMs = 30000; // 30 seconds throttle
+    if (!this.isForceRefresh && now - this.lastFetchTime < throttleMs) {
+      return;
+    }
+    if (this.fetchPromise) {
+      return;
+    }
+
+    this.isForceRefresh = false;
+
+    this.fetchPromise = (async () => {
+      try {
+        let repo = await resolveRemoteRepo(git, 'origin');
+        if (!repo || repo.provider !== 'github') {
+          try {
+            const remotesRaw = await git.exec(['remote']);
+            const remotes = remotesRaw.split('\n').map(r => r.trim()).filter(Boolean);
+            for (const remote of remotes) {
+              if (remote === 'origin') continue;
+              const r = await resolveRemoteRepo(git, remote);
+              if (r && r.provider === 'github') {
+                repo = r;
+                break;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (repo && repo.provider === 'github') {
+          const prs = await listPullRequests(repo);
+          const newMap = new Map<string, PullRequest>();
+          for (const pr of [...prs].reverse()) {
+            newMap.set(pr.headRef, pr);
+          }
+          this.prMap = newMap;
+          this.lastFetchTime = Date.now();
+          this._onDidChangeTreeData.fire();
+        }
+      } catch (err) {
+        console.error('goodBranchManager: failed to fetch PRs', err);
+      } finally {
+        this.fetchPromise = null;
+      }
+    })();
   }
 
   getTreeItem(element: Node): vscode.TreeItem {
@@ -83,14 +151,39 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     const ageDays = (Date.now() / 1000 - b.committerDateUnix) / 86400;
     const isStale = staleDays > 0 && ageDays > staleDays && !b.isCurrent;
 
+    const showPrStatus = vscode.workspace.getConfiguration('goodBranchManager').get<boolean>('showPrStatus', true);
+    const branchName = b.isRemote ? b.shortName : b.name;
+    const pr = showPrStatus ? this.prMap.get(branchName) : undefined;
+
     const status = this.syncStatus(b);
     const hints: string[] = [status.text, b.committerDateRelative];
     if (!b.isRemote && b.name === node.repo.defaultBranch) hints.push('default');
     if (b.merged) hints.push('merged');
     if (isStale) hints.push('stale');
+
+    if (pr) {
+      if (pr.state === 'open') {
+        hints.push(`PR #${pr.number}`);
+      } else if (pr.mergedAt) {
+        hints.push(`PR #${pr.number} (merged)`);
+      } else {
+        hints.push(`PR #${pr.number} (closed)`);
+      }
+    }
+
     item.description = hints.filter(Boolean).join(' · ');
 
-    item.iconPath = new vscode.ThemeIcon(status.icon, status.color ? new vscode.ThemeColor(status.color) : undefined);
+    if (pr && !b.isCurrent) {
+      if (pr.state === 'open') {
+        item.iconPath = new vscode.ThemeIcon('git-pull-request', new vscode.ThemeColor('charts.green'));
+      } else if (pr.mergedAt) {
+        item.iconPath = new vscode.ThemeIcon('git-pull-request-merged', new vscode.ThemeColor('charts.purple'));
+      } else {
+        item.iconPath = new vscode.ThemeIcon('git-pull-request-closed', new vscode.ThemeColor('charts.red'));
+      }
+    } else {
+      item.iconPath = new vscode.ThemeIcon(status.icon, status.color ? new vscode.ThemeColor(status.color) : undefined);
+    }
 
     const lines = [
       `**${b.name}**`,
@@ -102,7 +195,14 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     if (!b.isRemote && b.name === node.repo.defaultBranch) lines.push('Default branch.');
     if (b.merged) lines.push('Already merged into the default branch.');
     if (isStale) lines.push(`Stale: no commits in over ${staleDays} days.`);
+
+    if (pr) {
+      const prStatus = pr.state === 'open' ? 'open' : (pr.mergedAt ? 'merged' : 'closed');
+      lines.push(`Pull Request: [#${pr.number} - ${pr.title}](${pr.htmlUrl}) (${prStatus})`);
+    }
+
     item.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+    item.tooltip.isTrusted = true;
 
     const ctx: string[] = ['branch'];
     ctx.push(b.isRemote ? 'remote' : 'local');
@@ -110,6 +210,7 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<Node> {
     if (b.isCurrent) ctx.push('current');
     if (!b.isCurrent) ctx.push('not-current');
     if (!b.isRemote && b.name === node.repo.defaultBranch) ctx.push('default');
+    if (pr) ctx.push('has-pr');
     item.contextValue = ctx.join('-');
 
     if (!b.isCurrent) {
