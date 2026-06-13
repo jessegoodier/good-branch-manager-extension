@@ -35,6 +35,8 @@ export interface Branch {
   committerDateUnix: number;
   committerDateRelative: string;
   sha: string;
+  fullSha: string;
+  authorName: string;
   merged: boolean;
 }
 
@@ -107,7 +109,9 @@ export class Git {
       '%(committerdate:unix)',
       '%(committerdate:relative)',
       '%(HEAD)',
-      '%(objectname:short)'
+      '%(objectname:short)',
+      '%(objectname)',
+      '%(authorname)'
     ].join('%00');
 
     const defaultBranch = await this.getDefaultBranch();
@@ -123,7 +127,7 @@ export class Git {
         .split('\n')
         .filter(Boolean)
         .map((line) => {
-          const [name, upstream, track, dateUnix, dateRel, head, sha] = line.split(NUL);
+          const [name, upstream, track, dateUnix, dateRel, head, sha, fullSha, authorName] = line.split(NUL);
           const ahead = Number(/ahead (\d+)/.exec(track ?? '')?.[1] ?? 0);
           const behind = Number(/behind (\d+)/.exec(track ?? '')?.[1] ?? 0);
           const remote = isRemote ? name.split('/')[0] : undefined;
@@ -140,6 +144,8 @@ export class Git {
             committerDateUnix: Number(dateUnix),
             committerDateRelative: dateRel,
             sha,
+            fullSha,
+            authorName,
             merged: merged.has(name) && name !== defaultBranch
           };
         });
