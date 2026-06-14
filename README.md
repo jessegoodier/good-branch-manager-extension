@@ -6,7 +6,7 @@ A simple branch manager focused on the most common workflows when using git. Liv
 
 ## Installation
 
-Download the latest `.vsix` package from the [GitHub Releases](https://github.com/jessegoodier/good-branch-manager-extension/releases) page, then install it from VS Code by opening the Extensions view, clicking the three-dot menu, selecting "Install from VSIX...", and choosing the downloaded `.vsix` file.
+Download the latest `.vsix` package from the [GitHub Releases](https://github.com/JesseGoodier/good-branch-manager-extension/releases) page, then install it from VS Code by opening the Extensions view, clicking the three-dot menu, selecting "Install from VSIX...", and choosing the downloaded `.vsix` file.
 
 Or install it from the command line:
 

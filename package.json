@@ -1,13 +1,13 @@
 {
   "name": "good-branch-manager",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "description": "Simple git branch view: sync status at a glance, branch actions, and GitHub pull requests from the Source Control sidebar.",
-  "homepage": "https://github.com/jessegoodier/good-branch-manager-extension#readme",
+  "homepage": "https://github.com/JesseGoodier/good-branch-manager-extension#readme",
   "publisher": "JesseGoodier",
   "icon": "good-branch-manager.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jessegoodier/good-branch-manager-extension.git"
+    "url": "https://github.com/JesseGoodier/good-branch-manager-extension.git"
   },
   "license": "MIT",
   "main": "./out/extension.js",
@@ -15,7 +15,7 @@
     "onStartupFinished"
   ],
   "bugs": {
-    "url": "https://github.com/jessegoodier/good-branch-manager-extension/issues"
+    "url": "https://github.com/JesseGoodier/good-branch-manager-extension/issues"
   },
   "categories": [
     "SCM Providers"
