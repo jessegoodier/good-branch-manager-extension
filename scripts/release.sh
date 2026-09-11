@@ -76,6 +76,15 @@ resolve_bump() {
   printf '%s\n' "$choice"
 }
 
+# Releases cut from a non-main branch leave the "latest" GitHub release on a
+# divergent commit. gh's --fail-on-no-commits only accepts compare status
+# "ahead", so "diverged" (main has new commits AND is not a descendant of that
+# side-branch tag) incorrectly aborts after the version bump and tag push.
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${GITHUB_REF_NAME:-}" != "main" ]]; then
+  echo "Releases must be run from main (got: ${GITHUB_REF_NAME:-unknown})." >&2
+  exit 1
+fi
+
 BUMP="$(resolve_bump "${1:-}")"
 NAME="$(node -p "require('./package.json').name")"
 VERSION="$(next_version "$BUMP")"
@@ -118,11 +127,24 @@ echo "Pushing tag $TAG..."
 git push origin "$TAG"
 
 echo "Creating GitHub release..."
-gh release create "$TAG" "$VSIX#VSIX package" \
-  --fail-on-no-commits \
-  --generate-notes \
-  --notes "Install locally with: \`code --install-extension $VSIX\`" \
-  --title "$TAG" \
+# Do not use --fail-on-no-commits: it treats divergent latest tags as "no
+# commits" (see main-only guard above). Tag existence checks already prevent
+# duplicate version publishes.
+#
+# Anchor notes at the last *published* GitHub release (not the previous git
+# tag). Orphaned tags / side-branch releases would otherwise omit commits.
+release_args=(
+  "$TAG" "$VSIX#VSIX package"
+  --generate-notes
+  --notes "Install locally with: \`code --install-extension $VSIX\`"
+  --title "$TAG"
   --verify-tag
+)
+prev_published="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+if [[ -n "$prev_published" ]]; then
+  echo "Generating notes since last published release $prev_published..."
+  release_args+=(--notes-start-tag "$prev_published")
+fi
+gh release create "${release_args[@]}"
 
 echo "Released $TAG with $VSIX attached."

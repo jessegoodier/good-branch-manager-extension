@@ -19,6 +19,9 @@ permissions:
 jobs:
   release:
     name: Package and publish release
+    # Side-branch releases make the GitHub "latest" tag diverge from main and
+    # break subsequent main releases (gh --fail-on-no-commits / compare status).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
