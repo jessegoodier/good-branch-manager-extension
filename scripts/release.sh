@@ -76,6 +76,15 @@ resolve_bump() {
   printf '%s\n' "$choice"
 }
 
+# Releases cut from a non-main branch leave the "latest" GitHub release on a
+# divergent commit. gh's --fail-on-no-commits only accepts compare status
+# "ahead", so "diverged" (main has new commits AND is not a descendant of that
+# side-branch tag) incorrectly aborts after the version bump and tag push.
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${GITHUB_REF_NAME:-}" != "main" ]]; then
+  echo "Releases must be run from main (got: ${GITHUB_REF_NAME:-unknown})." >&2
+  exit 1
+fi
+
 BUMP="$(resolve_bump "${1:-}")"
 NAME="$(node -p "require('./package.json').name")"
 VERSION="$(next_version "$BUMP")"
@@ -118,8 +127,10 @@ echo "Pushing tag $TAG..."
 git push origin "$TAG"
 
 echo "Creating GitHub release..."
+# Do not use --fail-on-no-commits: it treats divergent latest tags as "no
+# commits" (see main-only guard above). Tag existence checks already prevent
+# duplicate version publishes.
 gh release create "$TAG" "$VSIX#VSIX package" \
-  --fail-on-no-commits \
   --generate-notes \
   --notes "Install locally with: \`code --install-extension $VSIX\`" \
   --title "$TAG" \
