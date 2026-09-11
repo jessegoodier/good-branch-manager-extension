@@ -130,10 +130,21 @@ echo "Creating GitHub release..."
 # Do not use --fail-on-no-commits: it treats divergent latest tags as "no
 # commits" (see main-only guard above). Tag existence checks already prevent
 # duplicate version publishes.
-gh release create "$TAG" "$VSIX#VSIX package" \
-  --generate-notes \
-  --notes "Install locally with: \`code --install-extension $VSIX\`" \
-  --title "$TAG" \
+#
+# Anchor notes at the last *published* GitHub release (not the previous git
+# tag). Orphaned tags / side-branch releases would otherwise omit commits.
+release_args=(
+  "$TAG" "$VSIX#VSIX package"
+  --generate-notes
+  --notes "Install locally with: \`code --install-extension $VSIX\`"
+  --title "$TAG"
   --verify-tag
+)
+prev_published="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+if [[ -n "$prev_published" ]]; then
+  echo "Generating notes since last published release $prev_published..."
+  release_args+=(--notes-start-tag "$prev_published")
+fi
+gh release create "${release_args[@]}"
 
 echo "Released $TAG with $VSIX attached."
